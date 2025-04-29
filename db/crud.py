@@ -2,13 +2,11 @@
 
 import datetime
 from sqlalchemy.future import select
-
+from sqlalchemy import func
 from .database import AsyncSessionLocal
 from .models import User, DeviceOption, Event, ProxyLog
 
-
 # --- User ---
-
 async def get_or_create_user(tg_id: int, username: str) -> User:
     """
     Возвращает существующего пользователя с данным tg_id,
@@ -30,9 +28,7 @@ async def get_or_create_user(tg_id: int, username: str) -> User:
         await db.refresh(user)
         return user
 
-
-# --- DeviceOption ---
-
+# --- DeviceOption by ID ---
 async def get_device_option(device_id: int) -> dict:
     """
     Возвращает словарь с параметрами эмуляции для устройства device_id:
@@ -53,17 +49,48 @@ async def get_device_option(device_id: int) -> dict:
         if not opt:
             raise ValueError(f"DeviceOption с id={device_id} не найден")
         return {
-            "ua":       opt.ua,
+            "ua": opt.ua,
             "css_size": opt.css_size,
             "platform": opt.platform,
-            "dpr":      opt.dpr,
-            "mobile":   bool(opt.mobile),
-            "model":    opt.model,
+            "dpr": opt.dpr,
+            "mobile": bool(opt.mobile),
+            "model": opt.model,
         }
 
+# --- Random Device ---
+async def get_random_device() -> dict:
+    """
+    Возвращает один случайный профиль устройства из БД в виде dict:
+      {
+        "id": int,
+        "ua": str,
+        "css_size": [width:int, height:int],
+        "platform": str,
+        "dpr": int,
+        "mobile": bool,
+        "model": str|None
+      }
+    """
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(DeviceOption)
+            .order_by(func.random())
+            .limit(1)
+        )
+        device = result.scalars().first()
+        if device is None:
+            raise ValueError("В базе нет ни одного профиля устройства")
+        return {
+            "id": device.id,
+            "ua": device.ua,
+            "css_size": device.css_size,
+            "platform": device.platform,
+            "dpr": device.dpr,
+            "mobile": bool(device.mobile),
+            "model": device.model,
+        }
 
 # --- ProxyLog ---
-
 async def create_proxy_log(
     attempt: int,
     ip: str | None,
@@ -84,9 +111,7 @@ async def create_proxy_log(
         await db.refresh(log)
         return log
 
-
 # --- Event ---
-
 async def create_event(
     user_id: int,
     device_option_id: int,
