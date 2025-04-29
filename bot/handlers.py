@@ -66,14 +66,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     report = (
-        f"🚀 Переход по {raw_url}\n\n"
-        f"📱 Профиль #{device['id']}: {device['model']}\n"
+        #f"🚀 Переход по {raw_url}\n\n"
+        f"📱 Профиль: {device['model']}\n"
         f"   • UA: {device['ua']}\n"
-        f"   • Экран: {device['css_size'][0]}×{device['css_size'][1]}\n"
-        f"   • DPR={device['dpr']}, mobile={device['mobile']}\n\n"
-        f"🔗 Начальный URL: {initial_url}\n"
-        f"✅ Итоговый URL: {final_url}\n"
-        f"🌐 IP: {ip} (ISP: {isp})"
+        #f"   • Экран: {device['css_size'][0]}×{device['css_size'][1]}\n"
+        #f"   • DPR={device['dpr']}, mobile={device['mobile']}\n\n"
+        f"🔗 Начальный URL:\n"
+        f"{initial_url}\n"
+        f"✅ Итоговый URL:\n"
+        f"{final_url}\n"
+        f"🌐 IP: {ip}"\n"
+        f"📡 ISP: {isp}"
     )
 
     # один итоговый reply с отключённым предпросмотром и reply_to_message_id
