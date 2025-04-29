@@ -16,7 +16,7 @@ URL_PATTERN = re.compile(r'https?://[^\s)]+')  # добавлено
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Пришли мне любую ссылку — и я покажу, куда она редиректит."
+        "Привет! Пришли мне ссылку и я перейду по ней."
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
