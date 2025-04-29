@@ -9,8 +9,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
 from config import (
-    USERNAME_BASE,
-    PASSWORD,
+    PROXY_USERNAME,
+    PROXY_PASSWORD,
     PROXY_DNS,
     IP_API_URL,
     CHECK_INTERVAL,
@@ -44,8 +44,8 @@ def _acquire_moscow_proxy():
     for attempt in range(1, MAX_PROXY_ATTEMPTS + 1):
         # Формируем credentials для ротации сессии
         session_id = uuid.uuid4().hex
-        user = f"{USERNAME_BASE}-session-{session_id}"
-        proxy_auth = f"http://{user}:{PASSWORD}@{PROXY_DNS}"
+        user = f"{PROXY_USERNAME}-session-{session_id}"
+        proxy_auth = f"http://{user}:{PROXY_PASSWORD}@{PROXY_DNS}"
 
         ip = city = None
         info = {}
