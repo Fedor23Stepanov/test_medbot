@@ -3,7 +3,7 @@ import os
 # ======================
 # Telegram Bot Settings
 # ======================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "<your-telegram-bot-token>")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "7552510473:AAEYfF7I2d8v48kl_XtqNT1J7QbuI-rNpBQ")
 
 # ======================
 # Database Settings
