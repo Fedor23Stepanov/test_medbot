@@ -1,6 +1,5 @@
 # db/database.py
 
-import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from config import DATABASE_URL
@@ -12,7 +11,7 @@ engine = create_async_engine(
     future=True,
 )
 
-# Фабрика для создания сессий
+# Фабрика для создания асинхронных сессий
 AsyncSessionLocal = sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -29,5 +28,6 @@ async def init_db():
     # Импортируем модели, чтобы SQLAlchemy их зарегистрировал
     import db.models  # noqa: F401
 
+    # Создаём таблицы в БД
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
