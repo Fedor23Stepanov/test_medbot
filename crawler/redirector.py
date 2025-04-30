@@ -105,7 +105,7 @@ def fetch_redirect(raw_url: str, device: dict):
     Если не удалось получить московский прокси — бросает ProxyAcquireError.
     """
     # 1) Нормализуем URL
-    url = raw_url if raw_url.startswith(("http://", "https://")) else f"http://{raw_url}"
+    url = raw_url if raw_url.startswith(("http://", "https://")) else f"https://{raw_url}"
     initial_url = unquote(url)
 
     # 2) Подбираем московский прокси (или получаем ошибку)
