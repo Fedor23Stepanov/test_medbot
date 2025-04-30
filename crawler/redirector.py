@@ -142,7 +142,10 @@ def fetch_redirect(raw_url: str, device: dict):
         "request_timeout": 30,
     }
 
-    driver = webdriver.Chrome(options=chrome_opts, seleniumwire_options=seleniumwire_opts)
+    driver = webdriver.Chrome(
+        seleniumwire_options=seleniumwire_opts,
+        options=chrome_opts,
+    )
 
     # stealth: прячем webdriver и эмулируем параметры устройства
     driver.execute_cdp_cmd(
