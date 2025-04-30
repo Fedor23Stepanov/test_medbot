@@ -53,6 +53,7 @@ class Event(Base):
 
     id               = Column(Integer, primary_key=True, index=True)
     user_id          = Column(Integer, ForeignKey("users.id"), nullable=False)
+    state            = Column(String, nullable=False)
     device_option_id = Column(Integer, ForeignKey("device_options.id"), nullable=False)
     initial_url      = Column(String, nullable=False)
     final_url        = Column(String, nullable=False)
