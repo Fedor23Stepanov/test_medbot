@@ -1,12 +1,16 @@
 # db/crud.py
 
 import datetime
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy.future import select
-from sqlalchemy import update, func      # ← добавили import func
+from sqlalchemy import update, func
 from .database import AsyncSessionLocal
-from .models import User, DeviceOption, ProxyLog, Event, UserStatus
+from .models import (
+    User, UserStatus,
+    Event,
+    DeviceOption, ProxyLog
+)
 
 
 # --- Работа с пользователями ---
@@ -82,6 +86,68 @@ async def block_user_by_username(username: str) -> bool:
         await db.commit()
         return bool(res.rowcount)
 
+async def get_user_stats(user_id: int) -> dict:
+    """
+    Возвращает число успешных редиректов:
+      – за всё время
+      – за последний месяц
+      – за последнюю неделю
+    """
+    async with AsyncSessionLocal() as db:
+        now = datetime.datetime.utcnow()
+        month_ago = now - datetime.timedelta(days=30)
+        week_ago  = now - datetime.timedelta(days=7)
+
+        total = (await db.execute(
+            select(func.count()).select_from(Event)
+            .where(Event.user_id == user_id, Event.state == "success")
+        )).scalar_one()
+
+        last_month = (await db.execute(
+            select(func.count()).select_from(Event)
+            .where(
+                Event.user_id == user_id,
+                Event.state == "success",
+                Event.timestamp >= month_ago
+            )
+        )).scalar_one()
+
+        last_week = (await db.execute(
+            select(func.count()).select_from(Event)
+            .where(
+                Event.user_id == user_id,
+                Event.state == "success",
+                Event.timestamp >= week_ago
+            )
+        )).scalar_one()
+
+        return {
+            "all_time":   total,
+            "last_month": last_month,
+            "last_week":  last_week,
+        }
+
+
+async def list_active_users() -> List[User]:
+    """
+    Возвращает всех пользователей со статусом active
+    """
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(User).where(User.status == UserStatus.active)
+        )
+        return result.scalars().all()
+
+
+async def get_user_by_id(user_id: int) -> Optional[User]:
+    """
+    Возвращает User по его internal ID
+    """
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(User).where(User.id == user_id)
+        )
+        return result.scalars().first()
 
 # --- Исправленный импорт позволяет корректно выбирать случайное устройство ---
 
