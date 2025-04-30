@@ -6,7 +6,7 @@ import os
 # Telegram Bot Settings
 # ======================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "7552510473:AAEYfF7I2d8v48kl_XtqNT1J7QbuI-rNpBQ")
-
+INITIAL_ADMINS = os.getenv("INITIAL_ADMINS", "F_Stepanov")
 # ======================
 # Database Settings
 # ======================
