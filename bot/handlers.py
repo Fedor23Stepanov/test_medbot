@@ -25,11 +25,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 0) валидация ссылок:
     if not urls:
+        await create_event(
+            user_id=user.id,
+            state="no link",
+            device_option_id=None,
+            initial_url=None,
+            final_url=None,
+            ip=None,
+            isp=None
+        )
         return await update.message.reply_text(
             "❗ Пожалуйста, пришли ссылку.",
             reply_to_message_id=update.message.message_id
         )
     if len(urls) > 1:
+        await create_event(
+            user_id=user.id,
+            state="many links",
+            device_option_id=None,
+            initial_url=None,
+            final_url=None,
+            ip=None,
+            isp=None
+        )
         return await update.message.reply_text(
             "❗ Одну ссылку за раз, пожалуйста.",
             reply_to_message_id=update.message.message_id        
@@ -54,6 +72,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ProxyAcquireError as e:
         for at in e.attempts:
             await create_proxy_log(at["attempt"], at["ip"], at["city"])
+        await create_event(
+            user_id=user.id,
+            state="proxy error",
+            device_option_id=device["id"],
+            initial_url=initial_url,
+            final_url=None,
+            ip=None,
+            isp=None
+        )
         return await update.message.reply_text(
             f"⚠️ Не удалось подобрать прокси за {len(e.attempts)} попыток.",
             reply_to_message_id=update.message.message_id  # добавлено
@@ -64,6 +91,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await create_event(
         user_id=user.id,
+        state="success",
         device_option_id=device["id"],
         initial_url=initial_url,
         final_url=final_url,
