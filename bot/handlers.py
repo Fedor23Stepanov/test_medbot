@@ -1,4 +1,3 @@
-# bot/handlers.py
 import re
 import asyncio
 from functools import partial
@@ -21,10 +20,10 @@ async def check_access(update: Update, roles_allowed: list[str]) -> bool:
     tg_id = update.effective_user.id
     role = await get_user_role(tg_id)
     if role not in roles_allowed:
-        #await update.message.reply_text(
-        #    "❌ Доступ запрещён.",
-        #    reply_to_message_id=update.message.message_id
-        #)
+        await update.message.reply_text(
+            "❌ Доступ запрещён.",
+            reply_to_message_id=update.message.message_id
+        )
         return False
     return True
 
@@ -36,25 +35,41 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
       – если его username в INITIAL_ADMINS (без @, нечувствительно к регистру) и он ещё не Admin,
         назначаем ему роль Admin
       – отправляем приветственное сообщение
+      – выводим в консоль отладочную информацию
     """
     tg_id = update.effective_user.id
-    username = (update.effective_user.username or "").strip()
+    username_raw = update.effective_user.username or ""
+    username = username_raw.strip()
     username_lower = username.lower()
 
     # 1) Создаём или получаем запись в БД
     user = await get_or_create_user(tg_id=tg_id, username=username)
 
-    # 2) Если ещё не Admin, и есть в списке INITIAL_ADMINS (с учётом регистра)
+    # 2) Нормализуем список админов и текущую роль
     admin_list = [name.strip().lower() for name in INITIAL_ADMINS]
     current_role = await get_user_role(tg_id)
-    if current_role != "Admin" and username_lower in admin_list:
-        await set_user_role(tg_id, "Admin")
 
-    # 3) Приветственное сообщение (цитата исходного)
+    # 3) Логируем для отладки
+    print("=== START HANDLER DEBUG ===")
+    print(f"Incoming tg_id       : {tg_id}")
+    print(f"Incoming username    : '{username_raw}' -> '{username_lower}'")
+    print(f"INITIAL_ADMINS       : {INITIAL_ADMINS} -> {admin_list}")
+    print(f"Current role in DB   : {current_role}")
+
+    # 4) Назначаем Admin, если нужно
+    if current_role != "Admin" and username_lower in admin_list:
+        print(f"-> '{username_lower}' найден в INITIAL_ADMINS, даём роль Admin")
+        await set_user_role(tg_id, "Admin")
+        print(f"-> Роль для '{username_lower}' теперь Admin")
+    else:
+        print("-> Не даём роль Admin (либо уже есть, либо username не в списке)")
+
+    # 5) Отправляем приветствие-цитату
     await update.message.reply_text(
-        "Привет! Пришли мне ссылку и я по ней перейду.",
+        "Привет! Пришли мне ссылку, и я по ней перейду.",
         reply_to_message_id=update.message.message_id
     )
+    print("=== END START HANDLER ===\n")
 
 # --- Команда /add_user (Admin & Maintainer) ---
 async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -66,7 +81,6 @@ async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_to_message_id=update.message.message_id
         )
     username = context.args[0].lstrip("@")
-    # Получаем или создаём запись (tg_id=0, т.к. юзер ещё не писал боту)
     user = await get_or_create_user(0, username)
     await set_user_role(user.tg_id, "User")
     await update.message.reply_text(
@@ -110,11 +124,9 @@ async def add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Обработка любых текстовых сообщений ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # проверяем, что пользователь в нашей БД и имеет право работать с ботом
     if not await check_access(update, ["Admin", "Maintainer", "User"]):
         return
 
-    # получаем или создаём запись User
     user = await get_or_create_user(
         tg_id=update.effective_user.id,
         username=update.effective_user.username or ""
@@ -123,7 +135,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
     urls = URL_PATTERN.findall(text)
 
-    # 1) Нет ссылок
     if not urls:
         await create_event(
             user_id=user.id,
@@ -139,7 +150,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_to_message_id=update.message.message_id
         )
 
-    # 2) Слишком много ссылок
     if len(urls) > 1:
         await create_event(
             user_id=user.id,
@@ -157,7 +167,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     raw_url = urls[0]
 
-    # 3) Получаем случайное устройство
     try:
         device = await get_random_device()
     except ValueError as e:
@@ -166,17 +175,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_to_message_id=update.message.message_id
         )
 
-    # 4) Запускаем редирект в потоках, ловим прокси-ошибку
     loop = asyncio.get_running_loop()
     try:
         initial_url, final_url, ip, isp, _, proxy_attempts = await loop.run_in_executor(
             None, partial(fetch_redirect, raw_url, device)
         )
     except ProxyAcquireError as e:
-        # лог каждой попытки
         for at in e.attempts:
             await create_proxy_log(at["attempt"], at["ip"], at["city"])
-        # сохраняем событие
         await create_event(
             user_id=user.id,
             state="proxy error",
@@ -191,11 +197,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_to_message_id=update.message.message_id
         )
 
-    # 5) Логируем все успешные попытки прокси подбора
     for at in proxy_attempts:
         await create_proxy_log(at["attempt"], at["ip"], at["city"])
 
-    # 6) Сохраняем успешное событие
     await create_event(
         user_id=user.id,
         state="success",
@@ -206,7 +210,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         isp=isp
     )
 
-    # 7) Формируем отчёт (с исправленным переносом строки)
     report = (
         f"📱 Профиль: {device['model']}\n"
         f"   • UA: {device['ua']}\n"
@@ -216,7 +219,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📡 ISP: {isp}"
     )
 
-    # 8) Один ответ-цитата без предпросмотра
     await update.message.reply_text(
         report,
         disable_web_page_preview=True,
