@@ -12,6 +12,7 @@ from db.crud import (
     get_user_role, set_user_role
 )
 from crawler.redirector import fetch_redirect, ProxyAcquireError
+from config import INITIAL_ADMINS
 
 URL_PATTERN = re.compile(r'https?://[^\s)]+')
 
