@@ -30,18 +30,30 @@ async def check_access(update: Update, roles_allowed: list[str]) -> bool:
 
 # --- Команда /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1) Получаем или создаём запись в БД
-    user = await get_or_create_user(
-        tg_id=update.effective_user.id,
-        username=update.effective_user.username or ""
-    )
-    # 2) Если это новый пользователь И его username в списке админов — даём роль Admin
-    current_role = await get_user_role(user.tg_id)
-    if current_role != "Admin" and (update.effective_user.username in INITIAL_ADMINS):
-        await set_user_role(user.tg_id, "Admin")
-    # 3) Приветственное сообщение    
+    """
+    При первом /start:
+      – создаём или получаем пользователя
+      – если его username в INITIAL_ADMINS (без @, нечувствительно к регистру) и он ещё не Admin,
+        назначаем ему роль Admin
+      – отправляем приветственное сообщение
+    """
+    tg_id = update.effective_user.id
+    username = (update.effective_user.username or "").strip()
+    username_lower = username.lower()
+
+    # 1) Создаём или получаем запись в БД
+    user = await get_or_create_user(tg_id=tg_id, username=username)
+
+    # 2) Если ещё не Admin, и есть в списке INITIAL_ADMINS (с учётом регистра)
+    admin_list = [name.strip().lower() for name in INITIAL_ADMINS]
+    current_role = await get_user_role(tg_id)
+    if current_role != "Admin" and username_lower in admin_list:
+        await set_user_role(tg_id, "Admin")
+
+    # 3) Приветственное сообщение (цитата исходного)
     await update.message.reply_text(
-        "Привет! Пришли мне ссылку и я по ней перейду."
+        "Привет! Пришли мне ссылку и я по ней перейду.",
+        reply_to_message_id=update.message.message_id
     )
 
 # --- Команда /add_user (Admin & Maintainer) ---
