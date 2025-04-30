@@ -20,9 +20,13 @@ class User(Base):
     role       = Column(String, nullable=False, default="User")
     tg_id      = Column(Integer, unique=True, index=True, nullable=False)
     username   = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.now)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    events = relationship("Event", back_populates="user")
+    events = relationship(
+        "Event",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class DeviceOption(Base):
@@ -36,7 +40,11 @@ class DeviceOption(Base):
     mobile   = Column(Boolean, nullable=False)
     model    = Column(String, nullable=True)
 
-    events = relationship("Event", back_populates="device_option")
+    events = relationship(
+        "Event",
+        back_populates="device_option",
+        cascade="all, delete-orphan",
+    )
 
 
 class ProxyLog(Base):
@@ -46,21 +54,21 @@ class ProxyLog(Base):
     attempt   = Column(Integer, nullable=False)
     ip        = Column(String, nullable=True)
     city      = Column(String, nullable=True)
-    timestamp = Column(DateTime, default=datetime.datetime.now)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 class Event(Base):
     __tablename__ = "events"
 
     id               = Column(Integer, primary_key=True, index=True)
-    user_id          = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id          = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     state            = Column(String, nullable=False)
-    device_option_id = Column(Integer, ForeignKey("device_options.id"), nullable=False)
+    device_option_id = Column(Integer, ForeignKey("device_options.id", ondelete="SET NULL"), nullable=False, index=True)
     initial_url      = Column(String, nullable=False)
     final_url        = Column(String, nullable=False)
     ip               = Column(String, nullable=True)
     isp              = Column(String, nullable=True)
-    timestamp        = Column(DateTime, default=datetime.datetime.now)
+    timestamp        = Column(DateTime, default=datetime.datetime.utcnow)
 
     user          = relationship("User", back_populates="events")
     device_option = relationship("DeviceOption", back_populates="events")
