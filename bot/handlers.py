@@ -145,6 +145,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def register_handlers(app: Application):
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-    )
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CommandHandler("add_user", add_user))
+    app.add_handler(CommandHandler("add_mod", add_mod))
+    app.add_handler(CommandHandler("add_admin", add_admin))
