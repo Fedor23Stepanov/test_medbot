@@ -19,7 +19,7 @@ class User(Base):
     id         = Column(Integer, primary_key=True, index=True)
     tg_id      = Column(Integer, unique=True, index=True, nullable=False)
     username   = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.now)
 
     events = relationship("Event", back_populates="user")
 
@@ -45,7 +45,7 @@ class ProxyLog(Base):
     attempt   = Column(Integer, nullable=False)
     ip        = Column(String, nullable=True)
     city      = Column(String, nullable=True)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.datetime.now)
 
 
 class Event(Base):
@@ -58,7 +58,7 @@ class Event(Base):
     final_url        = Column(String, nullable=False)
     ip               = Column(String, nullable=True)
     isp              = Column(String, nullable=True)
-    timestamp        = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp        = Column(DateTime, default=datetime.datetime.now)
 
     user          = relationship("User", back_populates="events")
     device_option = relationship("DeviceOption", back_populates="events")
