@@ -25,9 +25,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 0) валидация ссылок:
     if not urls:
-        return await update.message.reply_text("❗ Пожалуйста, пришли ссылку.")
+        return await update.message.reply_text(
+            "❗ Пожалуйста, пришли ссылку.",
+            reply_to_message_id=update.message.message_id
+        )
     if len(urls) > 1:
-        return await update.message.reply_text("❗ Одну ссылку за раз, пожалуйста.")
+        return await update.message.reply_text(
+            "❗ Одну ссылку за раз, пожалуйста.",
+            reply_to_message_id=update.message.message_id        
+        )
 
     raw_url = urls[0]
 
