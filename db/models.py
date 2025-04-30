@@ -1,26 +1,39 @@
 # db/models.py
 
+import enum
 import datetime
+
 from sqlalchemy import (
     Column,
     Integer,
     String,
-    Boolean,
     DateTime,
     JSON,
     ForeignKey,
+    Enum as SQLEnum,
+    Boolean,
 )
 from sqlalchemy.orm import relationship
 from .database import Base
 
+
+class UserStatus(enum.Enum):
+    pending = "pending"   # ожидает первого сообщения
+    active  = "active"    # активен, может пользоваться ботом
+    blocked = "blocked"   # заблокирован, бот игнорирует
+
+
 class User(Base):
     __tablename__ = "users"
 
-    id         = Column(Integer, primary_key=True, index=True)
-    role       = Column(String, nullable=False, default="User")
-    tg_id      = Column(Integer, unique=True, index=True, nullable=False)
-    username   = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.now)
+    id            = Column(Integer, primary_key=True, index=True)
+    tg_id         = Column(Integer, unique=True, index=True, nullable=True)
+    username      = Column(String, unique=True, index=True, nullable=False)
+    role          = Column(String, nullable=False, default="User")
+    status        = Column(SQLEnum(UserStatus), nullable=False, default=UserStatus.pending)
+    invited_by    = Column(Integer, nullable=True)  # Telegram ID пригласившего
+    created_at    = Column(DateTime, default=datetime.datetime.utcnow)
+    activated_at  = Column(DateTime, nullable=True)
 
     events = relationship(
         "Event",
@@ -54,7 +67,7 @@ class ProxyLog(Base):
     attempt   = Column(Integer, nullable=False)
     ip        = Column(String, nullable=True)
     city      = Column(String, nullable=True)
-    timestamp = Column(DateTime, default=datetime.datetime.now)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 class Event(Base):
@@ -62,13 +75,13 @@ class Event(Base):
 
     id               = Column(Integer, primary_key=True, index=True)
     user_id          = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    state            = Column(String, nullable=False)
     device_option_id = Column(Integer, ForeignKey("device_options.id", ondelete="SET NULL"), nullable=False, index=True)
+    state            = Column(String, nullable=False)
     initial_url      = Column(String, nullable=False)
     final_url        = Column(String, nullable=False)
     ip               = Column(String, nullable=True)
     isp              = Column(String, nullable=True)
-    timestamp        = Column(DateTime, default=datetime.datetime.now)
+    timestamp        = Column(DateTime, default=datetime.datetime.utcnow)
 
     user          = relationship("User", back_populates="events")
     device_option = relationship("DeviceOption", back_populates="events")
