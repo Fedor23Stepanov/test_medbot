@@ -4,7 +4,7 @@ import datetime
 from typing import Optional
 
 from sqlalchemy.future import select
-from sqlalchemy import update
+from sqlalchemy import update, func      # ← добавили import func
 from .database import AsyncSessionLocal
 from .models import User, DeviceOption, ProxyLog, Event, UserStatus
 
@@ -83,7 +83,7 @@ async def block_user_by_username(username: str) -> bool:
         return bool(res.rowcount)
 
 
-# --- Существующий функционал (оставлен без изменений) ---
+# --- Исправленный импорт позволяет корректно выбирать случайное устройство ---
 
 async def get_random_device() -> dict:
     """
@@ -92,7 +92,7 @@ async def get_random_device() -> dict:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(DeviceOption)
-            .order_by(func.random())
+            .order_by(func.random())    # теперь func определён
             .limit(1)
         )
         dev = result.scalars().first()
