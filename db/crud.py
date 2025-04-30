@@ -1,6 +1,7 @@
 # db/crud.py
 
 import datetime
+from typing import Optional
 from sqlalchemy.future import select
 from sqlalchemy import func
 from .database import AsyncSessionLocal
@@ -20,7 +21,7 @@ async def get_or_create_user(tg_id: int, username: str) -> User:
         user = User(
             tg_id=tg_id,
             username=username,
-            created_at=datetime.datetime.now()
+            created_at=datetime.datetime.utcnow()
         )
         db.add(user)
         await db.commit()
@@ -32,8 +33,8 @@ async def set_user_role(tg_id: int, role: str) -> User:
     Установить роль для пользователя (Admin, Maintainer, User).
     """
     async with AsyncSessionLocal() as db:
-        q = await db.execute(select(User).where(User.tg_id == tg_id))
-        user = q.scalars().first()
+        result = await db.execute(select(User).where(User.tg_id == tg_id))
+        user = result.scalars().first()
         if not user:
             raise ValueError(f"User {tg_id} not found")
         user.role = role
@@ -41,10 +42,13 @@ async def set_user_role(tg_id: int, role: str) -> User:
         await db.refresh(user)
         return user
 
-async def get_user_role(tg_id: int) -> str:
+async def get_user_role(tg_id: int) -> Optional[str]:
+    """
+    Возвращает текущую роль пользователя или None, если пользователь не найден.
+    """
     async with AsyncSessionLocal() as db:
-        q = await db.execute(select(User).where(User.tg_id == tg_id))
-        user = q.scalars().first()
+        result = await db.execute(select(User).where(User.tg_id == tg_id))
+        user = result.scalars().first()
         return user.role if user else None
 
 async def get_random_device() -> dict:
@@ -81,8 +85,8 @@ async def get_random_device() -> dict:
 
 async def create_proxy_log(
     attempt: int,
-    ip: str | None,
-    city: str | None
+    ip: Optional[str],
+    city: Optional[str]
 ) -> ProxyLog:
     """
     Создаёт запись о попытке подобрать московский прокси.
@@ -92,7 +96,7 @@ async def create_proxy_log(
             attempt=attempt,
             ip=ip,
             city=city,
-            timestamp=datetime.datetime.now()
+            timestamp=datetime.datetime.utcnow()
         )
         db.add(log)
         await db.commit()
@@ -105,8 +109,8 @@ async def create_event(
     device_option_id: int,
     initial_url: str,
     final_url: str,
-    ip: str | None,
-    isp: str | None
+    ip: Optional[str],
+    isp: Optional[str]
 ) -> Event:
     """
     Создаёт запись о событии редиректа.
@@ -120,7 +124,7 @@ async def create_event(
             final_url=final_url,
             ip=ip,
             isp=isp,
-            timestamp=datetime.datetime.now()
+            timestamp=datetime.datetime.utcnow()
         )
         db.add(ev)
         await db.commit()
