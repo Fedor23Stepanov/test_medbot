@@ -1,3 +1,4 @@
+# bot/handlers.py
 import re
 import asyncio
 from functools import partial
