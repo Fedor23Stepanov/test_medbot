@@ -21,7 +21,7 @@ async def get_or_create_user(tg_id: int, username: str) -> User:
         user = User(
             tg_id=tg_id,
             username=username,
-            created_at=datetime.datetime.utcnow()
+            created_at=datetime.datetime.now()
         )
         db.add(user)
         await db.commit()
@@ -96,7 +96,7 @@ async def create_proxy_log(
             attempt=attempt,
             ip=ip,
             city=city,
-            timestamp=datetime.datetime.utcnow()
+            timestamp=datetime.datetime.now()
         )
         db.add(log)
         await db.commit()
@@ -124,7 +124,7 @@ async def create_event(
             final_url=final_url,
             ip=ip,
             isp=isp,
-            timestamp=datetime.datetime.utcnow()
+            timestamp=datetime.datetime.now()
         )
         db.add(ev)
         await db.commit()
