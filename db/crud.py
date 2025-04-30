@@ -27,6 +27,26 @@ async def get_or_create_user(tg_id: int, username: str) -> User:
         await db.refresh(user)
         return user
 
+async def set_user_role(tg_id: int, role: str) -> User:
+    """
+    Установить роль для пользователя (Admin, Maintainer, User).
+    """
+    async with AsyncSessionLocal() as db:
+        q = await db.execute(select(User).where(User.tg_id == tg_id))
+        user = q.scalars().first()
+        if not user:
+            raise ValueError(f"User {tg_id} not found")
+        user.role = role
+        await db.commit()
+        await db.refresh(user)
+        return user
+
+async def get_user_role(tg_id: int) -> str:
+    async with AsyncSessionLocal() as db:
+        q = await db.execute(select(User).where(User.tg_id == tg_id))
+        user = q.scalars().first()
+        return user.role if user else None
+
 async def get_random_device() -> dict:
     """
     Возвращает один случайный профиль устройства из БД в виде dict:
