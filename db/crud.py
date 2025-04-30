@@ -4,7 +4,7 @@ import datetime
 from typing import Optional, List
 
 from sqlalchemy.future import select
-from sqlalchemy import update, func
+from sqlalchemy import update, func, delete
 from .database import AsyncSessionLocal
 from .models import (
     User, UserStatus,
@@ -59,6 +59,19 @@ async def activate_user(tg_id: int, username: str) -> Optional[User]:
         await db.refresh(user)
         return user
 
+async def list_pending_users(invited_by: int | None = None) -> List[User]:
+    async with AsyncSessionLocal() as db:
+        q = select(User).where(User.status == UserStatus.pending)
+        if invited_by is not None:
+            q = q.where(User.invited_by == invited_by)
+        result = await db.execute(q)
+        return result.scalars().all()
+
+async def revoke_invitation(user_id: int) -> bool:
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(delete(User).where(User.id == user_id))
+        await db.commit()
+        return bool(res.rowcount)
 
 async def get_user_by_tg(tg_id: int) -> Optional[User]:
     """
