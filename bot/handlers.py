@@ -19,17 +19,27 @@ async def check_access(update: Update, roles_allowed: list[str]) -> bool:
     tg_id = update.effective_user.id
     role = await get_user_role(tg_id)
     if role not in roles_allowed:
-        await update.message.reply_text(
-            "❌ Доступ запрещён.",
-            reply_to_message_id=update.message.message_id
-        )
+        #await update.message.reply_text(
+        #    "❌ Доступ запрещён.",
+        #    reply_to_message_id=update.message.message_id
+        #)
         return False
     return True
 
 # --- Команда /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 1) Получаем или создаём запись в БД
+    user = await get_or_create_user(
+        tg_id=update.effective_user.id,
+        username=update.effective_user.username or ""
+    )
+    # 2) Если это новый пользователь И его username в списке админов — даём роль Admin
+    current_role = await get_user_role(user.tg_id)
+    if current_role != "Admin" and (update.effective_user.username in INITIAL_ADMINS):
+        await set_user_role(user.tg_id, "Admin")
+    # 3) Приветственное сообщение    
     await update.message.reply_text(
-        "Привет! Пришли мне ссылку, и я покажу, куда она редиректит."
+        "Привет! Пришли мне ссылку и я по ней перейду."
     )
 
 # --- Команда /add_user (Admin & Maintainer) ---
