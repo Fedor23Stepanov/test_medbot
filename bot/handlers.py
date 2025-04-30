@@ -8,9 +8,11 @@ from telegram.ext import (
 )
 from db.crud import (
     get_or_create_user, get_random_device,
-    create_event, create_proxy_log
+    create_event, create_proxy_log, 
+    get_user_role, set_user_role
 )
 from crawler.redirector import fetch_redirect, ProxyAcquireError
+
 
 URL_PATTERN = re.compile(r'https?://[^\s)]+')  # добавлено
 
@@ -18,6 +20,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Пришли мне ссылку и я перейду по ней."
     )
+
+async def check_access(update, role_allowed: list[str]) -> bool:
+    role = await get_user_role(update.effective_user.id)
+    if role not in role_allowed:
+        await update.message.reply_text(
+            "❌ Доступ запрещён.",
+            reply_to_message_id=update.message.message_id
+        )
+        return False
+    return True
+
+async def add_user(update, context):
+    if not await check_access(update, ["Admin", "Maintainer"]):
+        return
+    if len(context.args) != 1:
+        return await update.message.reply_text("Использование: /add_user <username>", reply_to_message_id=update.message.message_id)
+    username = context.args[0].lstrip("@")
+    # Тут можно получить tg_id по username через Telegram API или попросить сначала написать /start
+    user = await get_or_create_user(0, username)  # доработать под ваш flow
+    await set_user_role(user.tg_id, "User")
+    await update.message.reply_text(f"Пользователь @{username} добавлен как User.", reply_to_message_id=update.message.message_id)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
