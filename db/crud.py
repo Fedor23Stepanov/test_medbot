@@ -2,67 +2,92 @@
 
 import datetime
 from typing import Optional
-from sqlalchemy.future import select
-from sqlalchemy import func
-from .database import AsyncSessionLocal
-from .models import User, DeviceOption, ProxyLog, Event
 
-async def get_or_create_user(tg_id: int, username: str) -> User:
+from sqlalchemy.future import select
+from sqlalchemy import update
+from .database import AsyncSessionLocal
+from .models import User, DeviceOption, ProxyLog, Event, UserStatus
+
+
+# --- Работа с пользователями ---
+
+async def invite_user(username: str, role: str, invited_by: Optional[int]) -> User:
     """
-    Возвращает существующего пользователя с данным tg_id,
-    либо создаёт нового с переданным username.
+    Пригласить нового пользователя:
+    создаёт запись с username, role и status='pending'.
     """
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(User).where(User.tg_id == tg_id))
-        user = result.scalars().first()
-        if user:
-            return user
-
         user = User(
-            tg_id=tg_id,
+            tg_id=None,
             username=username,
-            created_at=datetime.datetime.now()
+            role=role,
+            status=UserStatus.pending,
+            invited_by=invited_by,
+            created_at=datetime.datetime.utcnow()
         )
         db.add(user)
         await db.commit()
         await db.refresh(user)
         return user
 
-async def set_user_role(tg_id: int, role: str) -> User:
+
+async def activate_user(tg_id: int, username: str) -> Optional[User]:
     """
-    Установить роль для пользователя (Admin, Maintainer, User).
+    При первом сообщении от pending-пользователя:
+    ищем запись User(username, status='pending'),
+    заполняем tg_id, переводим в active и ставим activated_at.
     """
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(User).where(User.tg_id == tg_id))
+        result = await db.execute(
+            select(User).where(
+                User.username == username,
+                User.status == UserStatus.pending
+            )
+        )
         user = result.scalars().first()
         if not user:
-            raise ValueError(f"User {tg_id} not found")
-        user.role = role
+            return None
+
+        user.tg_id = tg_id
+        user.status = UserStatus.active
+        user.activated_at = datetime.datetime.utcnow()
         await db.commit()
         await db.refresh(user)
         return user
 
-async def get_user_role(tg_id: int) -> Optional[str]:
+
+async def get_user_by_tg(tg_id: int) -> Optional[User]:
     """
-    Возвращает текущую роль пользователя или None, если пользователь не найден.
+    Возвращает User по telegram_id, либо None.
     """
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(User).where(User.tg_id == tg_id))
-        user = result.scalars().first()
-        return user.role if user else None
+        result = await db.execute(
+            select(User).where(User.tg_id == tg_id)
+        )
+        return result.scalars().first()
+
+
+async def block_user_by_username(username: str) -> bool:
+    """
+    Ставит статус 'blocked' у пользователя с данным username.
+    Возвращает True, если был обновлён хотя бы один ряд.
+    """
+    async with AsyncSessionLocal() as db:
+        stmt = (
+            update(User)
+            .where(User.username == username)
+            .values(status=UserStatus.blocked)
+        )
+        res = await db.execute(stmt)
+        await db.commit()
+        return bool(res.rowcount)
+
+
+# --- Существующий функционал (оставлен без изменений) ---
 
 async def get_random_device() -> dict:
     """
-    Возвращает один случайный профиль устройства из БД в виде dict:
-    {
-        "id": int,
-        "ua": str,
-        "css_size": [width:int, height:int],
-        "platform": str,
-        "dpr": int,
-        "mobile": bool,
-        "model": str|None
-    }
+    Возвращает случайный профиль устройства из БД.
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -83,25 +108,27 @@ async def get_random_device() -> dict:
             "model": dev.model,
         }
 
+
 async def create_proxy_log(
     attempt: int,
     ip: Optional[str],
     city: Optional[str]
 ) -> ProxyLog:
     """
-    Создаёт запись о попытке подобрать московский прокси.
+    Логирует попытку подобрать прокси.
     """
     async with AsyncSessionLocal() as db:
         log = ProxyLog(
             attempt=attempt,
             ip=ip,
             city=city,
-            timestamp=datetime.datetime.now()
+            timestamp=datetime.datetime.utcnow()
         )
         db.add(log)
         await db.commit()
         await db.refresh(log)
         return log
+
 
 async def create_event(
     user_id: int,
@@ -113,7 +140,7 @@ async def create_event(
     isp: Optional[str]
 ) -> Event:
     """
-    Создаёт запись о событии редиректа.
+    Логирует результат обхода ссылки.
     """
     async with AsyncSessionLocal() as db:
         ev = Event(
@@ -124,7 +151,7 @@ async def create_event(
             final_url=final_url,
             ip=ip,
             isp=isp,
-            timestamp=datetime.datetime.now()
+            timestamp=datetime.datetime.utcnow()
         )
         db.add(ev)
         await db.commit()
