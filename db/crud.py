@@ -1,54 +1,42 @@
 # db/crud.py
 
 import datetime
-from typing import Optional, List
-
 from sqlalchemy.future import select
-from sqlalchemy import update, func, delete
+from sqlalchemy import func
 from .database import AsyncSessionLocal
-from .models import (
-    User, UserStatus,
-    Event,
-    DeviceOption, ProxyLog
-)
+from .models import User, DeviceOption, ProxyLog, Event, UserStatus
 
 
-# --- Работа с пользователями ---
-
-async def invite_user(username: str, role: str, invited_by: Optional[int]) -> User:
-    """
-    Пригласить нового пользователя:
-    создаёт запись с username, role и status='pending'.
-    """
+async def get_user_by_tg(tg_id: int) -> User | None:
+    """Найти пользователя по его Telegram ID."""
     async with AsyncSessionLocal() as db:
-        user = User(
-            tg_id=None,
-            username=username,
-            role=role,
-            status=UserStatus.pending,
-            invited_by=invited_by,
-            created_at=datetime.datetime.utcnow()
+        q = await db.execute(
+            select(User).where(User.tg_id == tg_id)
         )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
-        return user
+        return q.scalars().first()
 
 
-async def activate_user(tg_id: int, username: str) -> Optional[User]:
-    """
-    При первом сообщении от pending-пользователя:
-    ищем запись User(username, status='pending'),
-    заполняем tg_id, переводим в active и ставим activated_at.
-    """
+async def get_user_by_id(user_id: int) -> User | None:
+    """Найти пользователя по внутреннему ID."""
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User).where(
-                User.username == username,
-                User.status == UserStatus.pending
-            )
+        q = await db.execute(
+            select(User).where(User.id == user_id)
         )
-        user = result.scalars().first()
+        return q.scalars().first()
+
+
+async def activate_user(tg_id: int, username: str) -> User | None:
+    """
+    Активировать pending-пользователя по username (initial admin или приглашённый).
+    Заполнить tg_id, пометить статус active и дату активации.
+    """
+    uname = username.strip().lstrip("@").lower()
+    async with AsyncSessionLocal() as db:
+        q = await db.execute(
+            select(User)
+            .where(User.username == uname, User.status == UserStatus.pending)
+        )
+        user = q.scalars().first()
         if not user:
             return None
 
@@ -59,119 +47,104 @@ async def activate_user(tg_id: int, username: str) -> Optional[User]:
         await db.refresh(user)
         return user
 
-async def list_pending_users(invited_by: int | None = None) -> List[User]:
+
+async def invite_user(username: str, role: str, invited_by: int) -> User:
+    """
+    Создать нового pending-пользователя с указанной ролью и пригласителем.
+    """
+    uname = username.strip().lstrip("@").lower()
     async with AsyncSessionLocal() as db:
-        q = select(User).where(User.status == UserStatus.pending)
+        user = User(
+            username=uname,
+            role=role,
+            status=UserStatus.pending,
+            invited_by=invited_by,
+            created_at=datetime.datetime.utcnow(),
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        return user
+
+
+async def list_pending_users(invited_by: int | None = None) -> list[User]:
+    """
+    Получить список всех pending-пользователей.
+    Если invited_by указан, вернуть только те, кого пригласил этот tg_id.
+    """
+    async with AsyncSessionLocal() as db:
+        stmt = select(User).where(User.status == UserStatus.pending)
         if invited_by is not None:
-            q = q.where(User.invited_by == invited_by)
-        result = await db.execute(q)
+            stmt = stmt.where(User.invited_by == invited_by)
+        result = await db.execute(stmt)
         return result.scalars().all()
+
 
 async def revoke_invitation(user_id: int) -> bool:
-    async with AsyncSessionLocal() as db:
-        res = await db.execute(delete(User).where(User.id == user_id))
-        await db.commit()
-        return bool(res.rowcount)
-
-async def get_user_by_tg(tg_id: int) -> Optional[User]:
     """
-    Возвращает User по telegram_id, либо None.
+    Отозвать приглашение: удалить pending-пользователя по его ID.
+    Возвращает True, если удалилось, иначе False.
     """
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User).where(User.tg_id == tg_id)
+        q = await db.execute(
+            select(User)
+            .where(User.id == user_id, User.status == UserStatus.pending)
         )
-        return result.scalars().first()
-
-
-async def block_user_by_username(username: str) -> bool:
-    """
-    Ставит статус 'blocked' у пользователя с данным username.
-    Возвращает True, если был обновлён хотя бы один ряд.
-    """
-    async with AsyncSessionLocal() as db:
-        stmt = (
-            update(User)
-            .where(User.username == username)
-            .values(status=UserStatus.blocked)
-        )
-        res = await db.execute(stmt)
+        user = q.scalars().first()
+        if not user:
+            return False
+        await db.delete(user)
         await db.commit()
-        return bool(res.rowcount)
+        return True
 
-async def get_user_stats(user_id: int) -> dict:
+
+async def get_user_stats(user_id: int) -> dict[str, int]:
     """
-    Возвращает число успешных редиректов:
-      – за всё время
-      – за последний месяц
-      – за последнюю неделю
+    Посчитать количество Event для пользователя:
+    • all_time: всего
+    • last_month: за последние 30 дней
+    • last_week: за последние 7 дней
     """
+    now = datetime.datetime.utcnow()
     async with AsyncSessionLocal() as db:
-        now = datetime.datetime.utcnow()
-        month_ago = now - datetime.timedelta(days=30)
-        week_ago  = now - datetime.timedelta(days=7)
-
+        # Всего
         total = (await db.execute(
-            select(func.count()).select_from(Event)
-            .where(Event.user_id == user_id, Event.state == "success")
+            select(func.count())
+            .select_from(Event)
+            .where(Event.user_id == user_id)
         )).scalar_one()
 
+        # Последний месяц
+        m30 = now - datetime.timedelta(days=30)
         last_month = (await db.execute(
-            select(func.count()).select_from(Event)
-            .where(
-                Event.user_id == user_id,
-                Event.state == "success",
-                Event.timestamp >= month_ago
-            )
+            select(func.count())
+            .select_from(Event)
+            .where(Event.user_id == user_id, Event.timestamp >= m30)
         )).scalar_one()
 
+        # Последняя неделя
+        w7 = now - datetime.timedelta(days=7)
         last_week = (await db.execute(
-            select(func.count()).select_from(Event)
-            .where(
-                Event.user_id == user_id,
-                Event.state == "success",
-                Event.timestamp >= week_ago
-            )
+            select(func.count())
+            .select_from(Event)
+            .where(Event.user_id == user_id, Event.timestamp >= w7)
         )).scalar_one()
 
-        return {
-            "all_time":   total,
-            "last_month": last_month,
-            "last_week":  last_week,
-        }
+    return {
+        "all_time": total,
+        "last_month": last_month,
+        "last_week": last_week,
+    }
 
-
-async def list_active_users() -> List[User]:
-    """
-    Возвращает всех пользователей со статусом active
-    """
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User).where(User.status == UserStatus.active)
-        )
-        return result.scalars().all()
-
-
-async def get_user_by_id(user_id: int) -> Optional[User]:
-    """
-    Возвращает User по его internal ID
-    """
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User).where(User.id == user_id)
-        )
-        return result.scalars().first()
-
-# --- Исправленный импорт позволяет корректно выбирать случайное устройство ---
 
 async def get_random_device() -> dict:
     """
-    Возвращает случайный профиль устройства из БД.
+    Случайный профиль устройства из БД.
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(DeviceOption)
-            .order_by(func.random())    # теперь func определён
+            .order_by(func.random())
             .limit(1)
         )
         dev = result.scalars().first()
@@ -188,20 +161,16 @@ async def get_random_device() -> dict:
         }
 
 
-async def create_proxy_log(
-    attempt: int,
-    ip: Optional[str],
-    city: Optional[str]
-) -> ProxyLog:
+async def create_proxy_log(attempt: int, ip: str | None, city: str | None) -> ProxyLog:
     """
-    Логирует попытку подобрать прокси.
+    Логирование попытки подбора прокси.
     """
     async with AsyncSessionLocal() as db:
         log = ProxyLog(
             attempt=attempt,
             ip=ip,
             city=city,
-            timestamp=datetime.datetime.utcnow()
+            timestamp=datetime.datetime.utcnow(),
         )
         db.add(log)
         await db.commit()
@@ -215,11 +184,11 @@ async def create_event(
     device_option_id: int,
     initial_url: str,
     final_url: str,
-    ip: Optional[str],
-    isp: Optional[str]
+    ip: str | None,
+    isp: str | None
 ) -> Event:
     """
-    Логирует результат обхода ссылки.
+    Запись события перехода по ссылке.
     """
     async with AsyncSessionLocal() as db:
         ev = Event(
@@ -230,7 +199,7 @@ async def create_event(
             final_url=final_url,
             ip=ip,
             isp=isp,
-            timestamp=datetime.datetime.utcnow()
+            timestamp=datetime.datetime.utcnow(),
         )
         db.add(ev)
         await db.commit()
