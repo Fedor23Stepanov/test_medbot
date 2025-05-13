@@ -1,54 +1,53 @@
 # db/database.py
 
+import os
 import datetime
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.future import select
+from sqlalchemy import select
 
-from .models import Base, User, UserStatus
-from config import DATABASE_URL, ADMIN_USERNAME  # убедитесь, что в вашем config.py есть эти константы
+from .models import Base, User, UserStatus, UserRole  # предположительно есть перечисления ролей
+from .crud import invite_user, get_user_by_username
+from ..config import settings  # в settings.ADMIN_USERNAME и settings.DATABASE_URL
 
-# создаём подключение и фабрику сессий
+# Создаём движок
 engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,
+    settings.DATABASE_URL,
+    echo=getattr(settings, "DB_ECHO", False),
     future=True,
 )
+
+# Фабрика сессий
 AsyncSessionLocal = sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
+    engine, class_=AsyncSession, expire_on_commit=False
 )
 
 
 async def init_db() -> None:
     """
-    Создаёт все таблицы и при первом запуске добавляет администратора
-    (статус pending) из конфига. Если пользователь с таким username
-    уже есть, повторно не добавляет.
+    Создаёт таблицы и добавляет initial admin (pending), если его ещё нет.
+    Вызывать при старте приложения.
     """
-    # 1) создаём таблицы
+    # 1) создаём все таблицы
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # 2) инициализируем initial admin
-    admin_uname = ADMIN_USERNAME.strip().lstrip("@").lower()
+    # 2) проверяем, существует ли уже запись initial admin
+    admin_nick = settings.ADMIN_USERNAME.strip().lstrip("@").lower()
     async with AsyncSessionLocal() as session:
-        # проверяем, есть ли уже юзер с таким username
         result = await session.execute(
-            select(User).where(User.username == admin_uname)
+            select(User).where(User.username == admin_nick)
         )
-        existing = result.scalars().first()
+        admin = result.scalars().first()
 
-        if existing is None:
-            new_admin = User(
-                username=admin_uname,
-                role="admin",
-                status=UserStatus.pending,
-                invited_by=None,
-                created_at=datetime.datetime.utcnow(),
-                # tg_id и activated_at останутся пустыми, 
-                # заполнятся при первом сообщении от админа
+        if not admin:
+            # Создаём pending-пользователя с ролью admin
+            # invited_by=None, т.к. это первый пользователь
+            await invite_user(
+                username=admin_nick,
+                role=UserRole.ADMIN,       # или просто 'admin'
+                invited_by=None            # или 0, если поле не nullable
             )
-            session.add(new_admin)
-            await session.commit()
+            print(f"[init_db] Initial admin @{admin_nick} created with status PENDING.")
+        else:
+            print(f"[init_db] Admin @{admin_nick} already exists (status={admin.status}).")
