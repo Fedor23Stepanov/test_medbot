@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+#populate_devices.py
+
 import asyncio
 from sqlalchemy import delete
 from db.database import init_db, AsyncSessionLocal
