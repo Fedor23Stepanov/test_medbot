@@ -23,17 +23,38 @@ class UserStatus(enum.Enum):
     blocked = "blocked"   # заблокирован, бот игнорирует
 
 
+class TransitionMode(enum.Enum):
+    immediate    = "immediate"     # сразу
+    daily_random = "daily_random"  # в течение дня (случайное время)
+
+
+class NotificationMode(enum.Enum):
+    per_transition = "per_transition"  # каждый переход
+    after_queue    = "after_queue"     # по окончании очереди
+    disabled       = "disabled"        # отключены
+
+
 class User(Base):
     __tablename__ = "users"
 
-    id            = Column(Integer, primary_key=True, index=True)
-    tg_id         = Column(Integer, unique=True, index=True, nullable=True)
-    username      = Column(String, unique=True, index=True, nullable=False)
-    role          = Column(String, nullable=False, default="User")
-    status        = Column(SQLEnum(UserStatus), nullable=False, default=UserStatus.pending)
-    invited_by    = Column(Integer, nullable=True)  # Telegram ID пригласившего
-    created_at    = Column(DateTime, default=datetime.datetime.utcnow)
-    activated_at  = Column(DateTime, nullable=True)
+    id               = Column(Integer, primary_key=True, index=True)
+    tg_id            = Column(Integer, unique=True, index=True, nullable=True)
+    username         = Column(String, unique=True, index=True, nullable=False)
+    role             = Column(String, nullable=False, default="User")
+    status           = Column(SQLEnum(UserStatus), nullable=False, default=UserStatus.pending)
+    invited_by       = Column(Integer, nullable=True)  # Telegram ID пригласившего
+    created_at       = Column(DateTime, default=datetime.datetime.utcnow)
+    activated_at     = Column(DateTime, nullable=True)
+    transition_mode  = Column(
+        SQLEnum(TransitionMode),
+        nullable=False,
+        default=TransitionMode.immediate
+    )
+    notification_mode = Column(
+        SQLEnum(NotificationMode),
+        nullable=False,
+        default=NotificationMode.per_transition
+    )
 
     events = relationship(
         "Event",
